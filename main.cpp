@@ -131,10 +131,7 @@ void build_protobuf_descriptor(
 {
     protobuf_data& proto_data = protos.at(definition_filename);
     const auto& proto = proto_data.descriptor;
-
     const std::filesystem::path dir = std::filesystem::path(proto.name()).parent_path();
-    std::filesystem::create_directories(output_directory / "proto" / dir);
-    std::filesystem::create_directories(output_directory / "pb" / dir);
 
     if (indent) std::print("{:{}}", "", indent);
     std::println("Loading {} ({} dependencies)", definition_filename, proto.dependency_size());
@@ -172,12 +169,14 @@ void build_protobuf_descriptor(
         }
     }
 
-    std::ofstream out(output_directory / "proto" / definition_filename);
+    std::filesystem::create_directories(output_directory / "proto" / dir);
+    std::ofstream out(output_file);
     out << proto_data.definition;
 
     const std::string pbName = definition_filename.substr(0, definition_filename.find_last_of('.')) + ".pb";
     load_order.push_back(pbName);
 
+    std::filesystem::create_directories(output_directory / "pb" / dir);
     out = std::ofstream(output_directory / "pb" / pbName, std::ios::binary);
     const auto& raw_bytes = proto_data.raw_bytes;
     std::copy(raw_bytes.cbegin(), raw_bytes.cend(), std::ostream_iterator<uint8_t>(out));
