@@ -195,10 +195,23 @@ void build_protobuf_descriptor_pool(
         build_protobuf_descriptor(output_directory, pool, descriptors, descriptors.begin()->first, load_order);
 }
 
+void write_json(std::filesystem::path json_filepath, std::vector<std::string>& json_array) {
+
+    std::ofstream out(json_filepath);
+
+    std::print(out, "[");
+    for (int i = 0; i < json_array.size(); ++i) {
+        if (i)
+            std::print(out, ",");
+        std::print(out, "\n    \"{}\"", json_array[i]);
+    }
+    std::print(out, "\n]");
+}
+
 int main(int argc, char* args[]) {
 
     if (argc < 3) {
-        std::println("Usage: {} <input-file> <output-directory> [json-list-file-name]",
+        std::println("Usage: {} <input-file> <output-directory> [load-order-json-filename]",
             std::filesystem::path(std::string(args[0])).filename().string());
         return -1;
     }
@@ -219,13 +232,5 @@ int main(int argc, char* args[]) {
         return 0;
 
     const std::string json_filename(args[3]);
-    std::ofstream out(output_directory / json_filename);
-
-    std::print(out, "[");
-    for (int i = 0; i < load_order.size(); ++i) {
-        if (i)
-            std::print(out, ",");
-        std::print(out, "\n    \"{}\"", load_order[i]);
-    }
-    std::print(out, "\n]");
+    write_json(output_directory / json_filename, load_order);
 }
