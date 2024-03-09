@@ -22,76 +22,63 @@ SOFTWARE.
 
 #include "ProtobufResolver.hpp"
 
-ProtobufResolver::ProtobufResolver(const std::vector<std::vector<uint8_t>> compiled_descriptors) {
+ProtobufResolver::ProtobufResolver(const std::vector<std::vector<uint8_t>>& compiled_descriptors) {
 
-    std::unordered_map<std::string, protobuf_data> descriptors;
+    std::unordered_set<std::string> unloaded_descriptors;
+    unloaded_descriptors.reserve(compiled_descriptors.size());
     descriptors.reserve(compiled_descriptors.size());
+    load_order.reserve(compiled_descriptors.size());
 
     for (const auto& compiled_descriptor : compiled_descriptors) {
-        protobuf_data data = { .compiled = compiled_descriptor };
-        data.descriptor.ParseFromArray(
-            compiled_descriptor.data(),
-            (int)compiled_descriptor.size()
-        );
-        data.name = data.descriptor.name();
-        descriptors[data.name] = data;
-        std::println("Found {} in binary file", data.name);
+        google::protobuf::FileDescriptorProto descriptor;
+        descriptor.ParseFromArray(compiled_descriptor.data(), (int)compiled_descriptor.size());
+
+        const std::string name = descriptor.name();
+        const std::string compiled_name = name.substr(0, name.find_last_of('.')) + ".pb";
+
+        descriptors[name] = {
+            .name = name,
+            .compiled_name = compiled_name,
+            .descriptor = descriptor,
+            .compiled = compiled_descriptor,
+        };
+
+        unloaded_descriptors.insert(name);
+        std::println("Found {} in binary file", name);
     }
     std::println("");
 
-    load_order.reserve(compiled_descriptors.size());
-    descriptor_data.reserve(compiled_descriptors.size());
-
-    while (!descriptors.empty())
-        buildProtobufDescriptor(descriptors, descriptors.cbegin()->first);
+    while (!unloaded_descriptors.empty())
+        buildProtobufDescriptor(unloaded_descriptors, *unloaded_descriptors.cbegin());
 }
 
 void ProtobufResolver::buildProtobufDescriptor(
-    std::unordered_map<std::string, protobuf_data>& descriptors,
+    std::unordered_set<std::string>& unloaded_descriptors,
     const std::string& name,
     size_t indent
-)
-{
+) {
     auto& data = descriptors[name];
     auto& proto = data.descriptor;
 
-    if (indent) std::print("{:{}}", "", indent);
+    if (indent) std::print("{:>{}}", "-> ", indent);
     std::println("Loading {} ({} dependencies)", name, proto.dependency_size());
 
     for (int i = 0; i < proto.dependency_size(); ++i) {
         const std::string& dependency = proto.dependency(i);
-        if (pool.FindFileByName(dependency))
-            continue;
-        buildProtobufDescriptor(descriptors, dependency, indent + 3);
+        if (!pool.FindFileByName(dependency)) {
+            buildProtobufDescriptor(unloaded_descriptors, dependency, indent + 3);
+        }
     }
 
     data.definition = pool.BuildFile(proto)->DebugString();
-    data.compiled_name = name.substr(0, name.find_last_of('.')) + ".pb";
     load_order.push_back(name);
-    descriptor_data[name] = descriptors[name]; // todo: better method?
-    descriptors.erase(name);
+    unloaded_descriptors.erase(name);
 }
 
-const std::vector<std::string> ProtobufResolver::getLoadOrder() {
-    return load_order;
-}
-
-std::string ProtobufResolver::getLoadOrderAsJson() {
-
-    std::string ret = "[";
-    for (int i = 0; i < load_order.size(); ++i) {
-        if (i)
-            ret += ",";
-        ret += std::format("\n    \"{}\"", descriptor_data[load_order[i]].compiled_name);
-    }
-    ret += "\n]";
-    return ret;
-}
-
-void ProtobufResolver::dumpFile(std::filesystem::path output_directory, std::string name) {
+void ProtobufResolver::dumpFile(const std::filesystem::path& output_directory, const std::string& name) {
     const std::filesystem::path dir = std::filesystem::path(name).parent_path();
     const std::filesystem::path output_file = output_directory / "proto" / name;
-    const auto& proto = descriptor_data[name];
+    const auto& proto = descriptors[name];
 
     std::println("Extracting {}", name);
 
@@ -109,7 +96,6 @@ void ProtobufResolver::dumpFile(std::filesystem::path output_directory, std::str
             std::istreambuf_iterator<char>(existing.rdbuf()),
             std::istreambuf_iterator<char>(),
             proto.definition.begin());
-        existing.close();
 
         if (!equal) {
             // If not equal, back up old file for reference
@@ -117,6 +103,7 @@ void ProtobufResolver::dumpFile(std::filesystem::path output_directory, std::str
             std::filesystem::rename(output_file, output_file.string() + ".old");
         }
     }
+    existing.close();
 
     std::filesystem::create_directories(output_directory / "proto" / dir);
     std::ofstream out(output_file);
@@ -127,8 +114,24 @@ void ProtobufResolver::dumpFile(std::filesystem::path output_directory, std::str
     std::copy(proto.compiled.cbegin(), proto.compiled.cend(), std::ostream_iterator<uint8_t>(out));
 }
 
-void ProtobufResolver::dumpFiles(std::filesystem::path output_directory) {
+void ProtobufResolver::dumpFiles(const std::filesystem::path& output_directory) {
     for (const auto& file : load_order) {
         dumpFile(output_directory, file);
     }
+}
+
+const std::vector<std::string>& ProtobufResolver::getLoadOrder() {
+    return load_order;
+}
+
+std::string ProtobufResolver::getLoadOrderAsJson() {
+
+    std::string ret = "[";
+    for (int i = 0; i < load_order.size(); ++i) {
+        if (i)
+            ret += ",";
+        ret += std::format("\n    \"{}\"", descriptors[load_order[i]].compiled_name);
+    }
+    ret += "\n]";
+    return ret;
 }

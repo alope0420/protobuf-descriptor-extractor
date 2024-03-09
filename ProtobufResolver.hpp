@@ -23,6 +23,7 @@ SOFTWARE.
 #include <print>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <filesystem>
 #include <iostream>
@@ -46,20 +47,20 @@ public:
         std::vector<uint8_t> compiled;
     };
 
-    ProtobufResolver(const std::vector<std::vector<uint8_t>> compiled_descriptors);
-    const std::vector<std::string> getLoadOrder();
+    ProtobufResolver(const std::vector<std::vector<uint8_t>>& compiled_descriptors);
+    const std::vector<std::string>& getLoadOrder();
     std::string getLoadOrderAsJson();
-    void dumpFile(std::filesystem::path output_directory, std::string name);
-    void dumpFiles(std::filesystem::path output_directory);
+    void dumpFile(const std::filesystem::path& output_directory, const std::string& name);
+    void dumpFiles(const std::filesystem::path& output_directory);
 
 private:
     void buildProtobufDescriptor(
-        std::unordered_map<std::string, protobuf_data>& descriptors,
+        std::unordered_set<std::string>& unloaded_descriptors,
         const std::string& name,
         size_t indent = 0
     );
 
     google::protobuf::DescriptorPool pool;
     std::vector<std::string> load_order;
-    std::unordered_map<std::string, protobuf_data> descriptor_data;
+    std::unordered_map<std::string, protobuf_data> descriptors;
 };
