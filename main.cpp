@@ -80,18 +80,23 @@ std::vector<std::vector<uint8_t>> extract_descriptors(std::vector<uint8_t> buffe
 
     const std::string pattern_end = "\x62\x06proto3";
 
+    // Loop through buffer looking for proto descriptors - every time we find one,
+    // use the end position as the start position for the next iteration
     for (std::vector<uint8_t>::const_iterator pos = buffer.cbegin(), end; ; pos = end) {
 
+        // Start by looking for end of proto definition, as it is more distinct
         end = std::search(pos, buffer.cend(),
             pattern_end.cbegin(), pattern_end.cend());
         if (end == buffer.cend())
-            break;
+            break; //EOF - we're done
 
+        // Add length of end signature to get actual end of definition
         end += pattern_end.length();
 
+        // Now find the corresponding start signature
         const auto start = find_compiled_descriptor_start(pos, end);
         if (start == end)
-            continue;
+            continue; //false positive (seems unlikely to happen)
 
         ret.push_back(std::vector<uint8_t>(start, end));
     }
@@ -112,8 +117,8 @@ int main(int argc, char* args[]) {
     auto binary_file = read_binary_file(input_file);
     auto descriptors = extract_descriptors(binary_file);
 
-
     ProtobufResolver resolver(descriptors);
+    resolver.backup_replaced_dump_files = false; //TODO: add command line switch for this
     std::println("");
     resolver.dumpFiles(output_directory);
     // dump definitions, compileds

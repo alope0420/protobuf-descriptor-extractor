@@ -47,6 +47,8 @@ public:
         std::vector<uint8_t> compiled;
     };
 
+    bool backup_replaced_dump_files = true;
+
     ProtobufResolver(const std::vector<std::vector<uint8_t>>& compiled_descriptors);
     const std::vector<std::string>& getLoadOrder();
     std::string getLoadOrderAsJson();
@@ -59,6 +61,11 @@ private:
         const std::string& name,
         size_t indent = 0
     );
+
+    void compareToExistingProto(const std::filesystem::path& existing_file, const ProtobufResolver::protobuf_data& descriptor);
+    void createDirectoriesFor(const std::filesystem::path& base_directory, const std::string& file_name);
+    void extractProto(const std::filesystem::path& output_directory, const ProtobufResolver::protobuf_data& descriptor);
+    void extractCompiledProto(const std::filesystem::path& output_directory, const ProtobufResolver::protobuf_data& descriptor);
 
     google::protobuf::DescriptorPool pool;
     std::vector<std::string> load_order;

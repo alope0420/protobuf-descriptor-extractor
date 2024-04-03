@@ -22,8 +22,8 @@ SOFTWARE.
 
 #include "ProtobufResolver.hpp"
 
-ProtobufResolver::ProtobufResolver(const std::vector<std::vector<uint8_t>>& compiled_descriptors) {
-
+ProtobufResolver::ProtobufResolver(const std::vector<std::vector<uint8_t>>& compiled_descriptors)
+{
     std::unordered_set<std::string> unloaded_descriptors;
     unloaded_descriptors.reserve(compiled_descriptors.size());
     descriptors.reserve(compiled_descriptors.size());
@@ -56,7 +56,8 @@ void ProtobufResolver::buildProtobufDescriptor(
     std::unordered_set<std::string>& unloaded_descriptors,
     const std::string& name,
     size_t indent
-) {
+    )
+{
     auto& data = descriptors[name];
     auto& proto = data.descriptor;
 
@@ -75,57 +76,79 @@ void ProtobufResolver::buildProtobufDescriptor(
     unloaded_descriptors.erase(name);
 }
 
-void ProtobufResolver::dumpFile(const std::filesystem::path& output_directory, const std::string& name) {
-    const std::filesystem::path dir = std::filesystem::path(name).parent_path();
+void ProtobufResolver::dumpFile(const std::filesystem::path& output_directory, const std::string& name)
+{
     const std::filesystem::path output_file = output_directory / "proto" / name;
     const auto& proto = descriptors[name];
 
     std::println("Extracting {}", name);
 
-    // Check if file already exists
-    std::ifstream existing(output_file, std::ios::ate);
-    if (existing.fail()) {
-        // Does not already exist
-        std::println(">>> New proto file: {}", name);
-    }
-    else {
-        // Already exists. Check if it is equal to what we are going to output.
-        // We cannot short-circuit this by comparing file sizes, due to different newline formats - \n vs \r\n
-        existing.seekg(0, std::ios::beg);
-        bool equal = std::equal(
-            std::istreambuf_iterator<char>(existing.rdbuf()),
-            std::istreambuf_iterator<char>(),
-            proto.definition.begin());
-
-        if (!equal) {
-            // If not equal, back up old file for reference
-            std::println(">>> {} has changed", name);
-            std::filesystem::rename(output_file, output_file.string() + ".old");
-        }
-    }
-    existing.close();
-
-    std::filesystem::create_directories(output_directory / "proto" / dir);
-    std::ofstream out(output_file);
-    out << proto.definition;
-
-    std::filesystem::create_directories(output_directory / "pb" / dir);
-    out = std::ofstream(output_directory / "pb" / proto.compiled_name, std::ios::binary);
-    std::copy(proto.compiled.cbegin(), proto.compiled.cend(), std::ostream_iterator<uint8_t>(out));
+    extractProto(output_directory / "proto", proto);
+    extractCompiledProto(output_directory / "pb", proto);
 }
 
-void ProtobufResolver::dumpFiles(const std::filesystem::path& output_directory) {
+void ProtobufResolver::compareToExistingProto(const std::filesystem::path& existing_file, const ProtobufResolver::protobuf_data& descriptor)
+{
+    // Check if file already exists
+    std::ifstream existing(existing_file, std::ios::ate);
+    if (existing.fail()) {
+        // Does not already exist
+        std::println(">>> New proto file: {}", descriptor.name);
+        return;
+    }
+
+    // Already exists. Check if it is equal to what we are going to output.
+    // We cannot short-circuit this by comparing file sizes, due to different newline formats - \n vs \r\n
+    existing.seekg(0, std::ios::beg);
+    if (std::equal(
+        std::istreambuf_iterator<char>(existing.rdbuf()),
+        std::istreambuf_iterator<char>(),
+        descriptor.definition.cbegin())
+    ) {
+        return;
+    }
+
+    existing.close();
+    std::println(">>> Proto file has changed: {}", descriptor.name);
+    if (backup_replaced_dump_files)
+        std::filesystem::rename(existing_file, existing_file.string() + ".old");
+}
+
+void ProtobufResolver::createDirectoriesFor(const std::filesystem::path& base_directory, const std::string& file_name)
+{
+    const std::filesystem::path dir = std::filesystem::path(file_name).parent_path();
+    std::filesystem::create_directories(base_directory / dir);
+}
+
+void ProtobufResolver::extractProto(const std::filesystem::path& output_directory, const ProtobufResolver::protobuf_data& descriptor)
+{
+    createDirectoriesFor(output_directory, descriptor.name);
+    compareToExistingProto(output_directory / descriptor.name, descriptor);
+    std::ofstream out(output_directory / descriptor.name);
+    out << descriptor.definition;
+}
+
+void ProtobufResolver::extractCompiledProto(const std::filesystem::path& output_directory, const ProtobufResolver::protobuf_data& descriptor)
+{
+    createDirectoriesFor(output_directory, descriptor.compiled_name);
+    std::ofstream out(output_directory / descriptor.compiled_name, std::ios::binary);
+    std::copy(descriptor.compiled.cbegin(), descriptor.compiled.cend(), std::ostream_iterator<uint8_t>(out));
+}
+
+void ProtobufResolver::dumpFiles(const std::filesystem::path& output_directory)
+{
     for (const auto& file : load_order) {
         dumpFile(output_directory, file);
     }
 }
 
-const std::vector<std::string>& ProtobufResolver::getLoadOrder() {
+const std::vector<std::string>& ProtobufResolver::getLoadOrder()
+{
     return load_order;
 }
 
-std::string ProtobufResolver::getLoadOrderAsJson() {
-
+std::string ProtobufResolver::getLoadOrderAsJson()
+{
     std::string ret = "[";
     for (int i = 0; i < load_order.size(); ++i) {
         if (i)
