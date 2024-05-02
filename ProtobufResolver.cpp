@@ -132,7 +132,7 @@ void ProtobufResolver::extractCompiledProto(const std::filesystem::path& output_
 {
     createDirectoriesFor(output_directory, descriptor.compiled_name);
     std::ofstream out(output_directory / descriptor.compiled_name, std::ios::binary);
-    std::copy(descriptor.compiled.cbegin(), descriptor.compiled.cend(), std::ostream_iterator<uint8_t>(out));
+    std::ranges::copy(descriptor.compiled, std::ostream_iterator<uint8_t>(out));
 }
 
 void ProtobufResolver::dumpFiles(const std::filesystem::path& output_directory)
